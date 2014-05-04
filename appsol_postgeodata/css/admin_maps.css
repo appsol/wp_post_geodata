@@ -1,0 +1,18 @@
+#geographic .inside,
+#tribe_event_geographic .inside
+{
+    overflow: hidden;
+}
+#geographic label,
+#tribe_event_geographic label
+{
+    width: 100px;
+    display: inline-block;
+}
+.location, .map-container
+{
+    float: left;
+    width: 50%;
+    height: 380px;
+}
+
