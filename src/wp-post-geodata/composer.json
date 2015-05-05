@@ -1,0 +1,19 @@
+{
+	"name": "appsol/WP_Post_Geodata",
+    "description": "Wordpress plugin to allow geodata to be recorded about posts and to display posts in a geographic context.",
+    "license": "GPL2",
+    "keywords": ["wordpress"],
+    "authors": [
+        {
+            "name": "Stuart Laverick",
+            "email": "stuart@appropriatesolutions.co.uk"
+        }
+    ],
+    "repositories": 
+	[],
+
+	"require": {
+		"php": ">=5.3.0",
+		"google/apiclient": "1.0.*@beta"
+	}
+}

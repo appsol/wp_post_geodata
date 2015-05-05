@@ -1,0 +1,12 @@
+#post_geodata .inside:after {
+    content: ' ';
+    display: table-cell;
+    clear: both;
+}
+.location,
+.map-container {
+    float: left;
+    width: 50%;
+    height: 380px;
+}
+

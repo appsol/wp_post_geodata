@@ -1,14 +1,209 @@
 <?php
+/**
+ * Plugin Name: Post Geo Data
+ * Plugin URI: http://www.appropriatesolutions.co.uk/
+ * Description: Allows geographic data to be attached to Posts. Provides widgets and shortcodes that allow posts to be displayed on maps.
+ * Version: 0.1.0
+ * Author: Stuart Laverick
+ * Author URI: http://www.appropriatesolutions.co.uk/
+ * Text Domain: Optional. wp_post_geodata
+ * License: GPL2
+ *
+ * @package wp_post_geodata
+ */
+/*  Copyright 2015  Stuart Laverick  (email : stuart@appropriatesolutions.co.uk)
+
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License, version 2, as
+    published by the Free Software Foundation.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program; if not, write to the Free Software
+    Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+*/
+namespace PostGeoData;
+
+defined('ABSPATH') or die( 'No script kiddies please!' );
+
+// require_once 'vendor/autoload.php';
+require_once 'postgeodata_widget.php';
+require_once 'postgeodata_options.php';
+
+class PostGeoData
+{
+
+    /**
+     * Singleton class instance
+     *
+     * @var object VideoPlaylists
+     **/
+    private static $instance = null;
+
+    /**
+     * Holds the lst error message from the API or empty if none
+     *
+     * @var string
+     **/
+    public $lastError;
+
+    /**
+     * Constructor for PostGeoData
+     *
+     * @return void
+     * @author Stuart Laverick
+     **/
+    public function __construct()
+    {
+        add_action("widgets_init", [$this, 'register']);
+        add_shortcode('posts_geodata_map', [$this, 'shortcodeHandler']);
+        add_action('wp_enqueue_scripts', [$this, 'actionEnqueueAssets']);
+        add_action('admin_enqueue_scripts', [$this, 'actionEnqueueAdminAssets']);
+
+        if (is_admin()) {
+            $optionsPage = new PostGeoDataOptions();
+        }
+    }
+
+    /**
+     * Creates or returns an instance of this class
+     *
+     * @return A single instance of this class
+     * @author Stuart Laverick
+     **/
+    public static function getInstance()
+    {
+        if (null == self::$instance) {
+            self::$instance = new self;
+        }
+
+        return self::$instance;
+    }
+
+    /**
+     * Register the Widget
+     *
+     * @return void
+     * @author Stuart Laverick
+     **/
+    public function register()
+    {
+        register_widget('PostGeoData\PostGeoDataWidget');
+    }
+
+    /**
+     * Load any scripts and styles needed on the front
+     *
+     * @return void
+     * @author Stuart Laverick
+     **/
+    public function actionEnqueueAssets()
+    {
+        $options = get_option('wp_post_geodata');
+
+        if ($options['load_css'] == 'yes') {
+            wp_register_style('wp-post-geodata', plugin_dir_url(__FILE__) . 'assets/css/style.css');
+            wp_enqueue_style('wp-post-geodata');
+        }
+        $key = empty($options['googlemaps_simple_key'])? $options['googlemaps_simple_key'] : '';
+        wp_enqueue_script('wp-post-geodata-googlemaps', 'https://maps.googleapis.com/maps/api/js?key=' . $key, null, null, true);
+        wp_enqueue_script('wp-post-geodata-main', plugin_dir_url(__FILE__) . 'assets/js/main.js', ['jquery', 'wp-post-geodata-googlemaps'], '0.3.0', true);
+    }
+
+    /**
+     * Load any scripts and styles needed on the admin pages
+     *
+     * @return void
+     * @author Stuart Laverick
+     **/
+    public function actionEnqueueAdminAssets()
+    {
+        $options = get_option('wp_post_geodata');
+
+        wp_register_style('wp-post-geodata-admin', plugin_dir_url(__FILE__) . 'assets/css/admin.css');
+        wp_enqueue_style('wp-post-geodata-admin');
+
+        $key = empty($options['googlemaps_simple_key'])? $options['googlemaps_simple_key'] : '';
+        wp_enqueue_script('wp-post-geodata-googlemaps', 'https://maps.googleapis.com/maps/api/js?key=' . $key, null, null, true);
+        wp_enqueue_script('wp-post-geodata-admin', plugin_dir_url(__FILE__) . 'assets/js/admin.js', ['jquery', 'wp-post-geodata-googlemaps'], '0.3.0', true);
+    }
+
+    /**
+     * Handler for shortcode calls
+     *
+     * Options:
+     *
+     * @return string HTML of the map
+     * @author Stuart Laverick
+     **/
+    public function shortcodeHandler($attributes)
+    {
+        global $post;
+        extract(shortcode_atts(array(
+            'regions' => 'regions',
+            'categories' => '',
+            'height' => 426,
+            'width' => 700
+                        ), $attributes));
+        $categories = array_map('trim', explode(',', $categories));
+        update_option('appsol_geodata_categories_' . $post->ID, $categories);
+        update_option('appsol_geodata_regions_cat_' . $post->ID, $regions);
+        $this->showMap($post->ID, $height, $width, $regions);
+    }
+
+    /**
+     * undocumented function
+     *
+     * @return void
+     * @author 
+     **/
+    public function getPostMap($postid, $height, $width, $regions) {
+        global $post;
+        $the_post = $post;
+        $q = array(
+            'meta_key' => 'region',
+            'tax_query' => array(
+                'taxonomy' => 'category',
+                'field' => 'slug',
+                'terms' => 'regions'
+            )
+        );
+        $query = new WP_Query($q);
+        ?>
+        <div id="map" data-map-id="<?php echo $postid; ?>" style="width: <?php echo $width; ?>px; height: <?php echo $height; ?>px;"></div>
+        <?php if ($query->have_posts()): ?>
+            <div id="regions" class="nav">
+                <div class="dropdown">
+                    <a class="dropdown-toggle" data-toggle="dropdown" href="#">Regions<b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        <?php while ($query->have_posts()): $query->the_post(); ?>
+                            <li><a class="region" data-region-id="<?php echo get_post_meta($post->ID, "region", true) ?>" href="#"><?php echo get_the_title($post->ID); ?></a></li>
+                        <?php endwhile; ?>
+                    </ul>
+                </div>
+            </div>
+            <?php
+        endif;
+        $post = $the_post;
+    }
+}
+
+$postGeoData = PostGeoData::getInstance();
+
 /*
   Plugin Name: Post Geo Data
   Plugin URI: http://www.appropriatesolutions.co.uk/
   Description: Allows the geographic context of each post to be recorded and provides widgets and shortcodes to display that data in map form.
-  Author: Tim Ward and Stuart Laverick
+  Author: Stuart Laverick
   Version: 0.1
   Author URI: http://www.appropriatesolutions.co.uk/
  */
 
-class appsolPostGeoData extends WP_Widget {
+class appsolPostGeoData {
 
     function __construct() {
         parent::__construct(
@@ -492,4 +687,4 @@ class appsolPostGeoData extends WP_Widget {
 
 }
 
-add_action("widgets_init", array('appsolPostGeoData', 'init'));
+// add_action("widgets_init", array('appsolPostGeoData', 'init'));
